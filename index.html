@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+<meta charset="UTF-8" />
+<title>Leaflet Joulukalenteri</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+
+<style>
+  #map { height: 100vh; }
+  .popup-content { font-family: sans-serif; }
+  .setup { font-weight: bold; }
+  .punchline { margin-top: 8px; color: darkred; }
+
+    /* Shadow to service points icons */
+    .icon-shadow {
+    filter: drop-shadow(0px 1px 3px rgba(0, 0, 0, 0.5));
+    }
+
+
+  /* Popup */
+  .popup-content { font-family: sans-serif; }
+  .setup { font-weight: bold; }
+  .punchline { margin-top: 8px; color: darkred; }
+
+  /* ---- MODAL ---- */
+  .modal {
+    display: none;
+    position: fixed;
+    z-index: 9999;
+    left: 0; top: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(4px);
+    justify-content: center;
+    align-items: center;
+  }
+
+  .modal.show { display: flex; }
+
+  .modal-content {
+    background: #fff;
+    padding: 20px 22px;
+    border-radius: 12px;
+    width: 340px;
+    max-width: 92%;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+    animation: fadeIn 0.20s ease-out;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: scale(0.96); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+
+  .modal-header {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom: 8px;
+  }
+  .modal-header h2 {
+    margin: 0;
+    font-size: 1.1rem;
+  }
+  .close-btn {
+    font-size: 20px;
+    cursor: pointer;
+    line-height: 1;
+    border: none;
+    background: transparent;
+  }
+
+  #passwordInput {
+    width: 100%;
+    padding: 10px;
+    margin-top: 8px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    box-sizing: border-box;
+    font-size: 1rem;
+  }
+
+  #passwordSubmit {
+    margin-top: 12px;
+    width: 100%;
+    padding: 10px;
+    border: none;
+    background: #c62828;
+    color: white;
+    font-weight: 600;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+  }
+
+  #passwordSubmit:hover { background: #b71c1c; }
+
+  .error {
+    color: #b00020;
+    font-size: 0.9rem;
+    height: 1.1rem;
+    margin-top: 8px;
+    text-align:center;
+  }
+
+  .muted {
+    font-size: 0.9rem;
+    color: #666;
+    margin-top: 8px;
+    text-align:center;
+  }
+
+  /* small helper for mobile map pointer */
+  .leaflet-container { touch-action: pan-y; }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<!-- Modal (hidden by default) -->
+<div id="passwordModal" class="modal" aria-hidden="true">
+  <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-header">
+      <h2 id="modal-title">Avaa luukku</h2>
+      <button class="close-btn" title="Sulje" aria-label="Sulje">&times;</button>
+    </div>
+
+    <div>
+      <label for="passwordInput" class="visually-hidden">Salasana</label>
+      <input id="passwordInput" type="password" placeholder="Syötä salasana" autocomplete="off" />
+      <button id="passwordSubmit">Avaa</button>
+      <div id="passwordError" class="error" aria-live="polite"></div>
+      <div class="muted">Jokaisella luukulla on oma salasana.</div>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script>
+
+// ----------------------------------------------------
+// 1. SALASANA (voi olla myös luukkukohtainen)
+// ----------------------------------------------------
+const SECRET = "joulu2024";
+
+// ----------------------------------------------------
+// 2. KÄYTETÄÄNKÖ OIKEAA PÄIVÄÄ?
+//    -> Vaihda testipäivää halutessasi:
+//           const today = new Date("2024-12-05");
+// ----------------------------------------------------
+const today = new Date();  
+const currentDay = today.getDate();  // 1–31
+
+// ----------------------------------------------------
+// 3. ESIMERKKI GEOJSON
+//    Lisää loput 24 pistettä
+//    Voit lisätä myös: "password": "oma_salasana"
+// ----------------------------------------------------
+const luukut = {
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "luukku": 1,
+        "setup": "Miksi tonttu ei koskaan eksy?",
+        "punchline": "Koska hän seuraa joulumieltä!",
+        "password":"mistelinoksa"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [22.222176794824332, 60.3944065932836] // OK, Haarla
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "luukku": 2,
+        "setup": "Mitä joulupukki sanoi kun kartta unohtui?",
+        "punchline": "Aja vain kohti pohjoista!",
+        "password":"joulutähti"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [22.21477249024477, 60.243047014179915] // OK, Lenholma
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "luukku": 3,
+        "setup": "x",
+        "punchline": "x",
+        "password":"joulusukka"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [21.881605406103546, 61.5934872250941] // OK, Noormarkku
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "luukku": 4,
+        "setup": "x",
+        "punchline": "x",
+        "password":"konvehtirasia"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [21.448788110483612, 61.61162766901284] // OK, Reposaari
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "luukku": 5,
+        "setup": "x",
+        "punchline": "x",
+        "password":"porkkanalaatikko"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [22.578678301025608, 60.72432760750337] // OK, Pöytyä
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "luukku": 6,
+        "setup": "x",
+        "punchline": "x",
+        "password":"tonttu"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [22.377505962996167, 60.45957473415354] // OK, Littoinen
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "luukku": 7,
+        "setup": "x",
+        "punchline": "x",
+        "password":"muori"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [17.62006458975462, 59.8493313947306] // OK, Upsala
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "luukku": 8,
+        "setup": "x",
+        "punchline": "x",
+        "password":"korvatunturi"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [21.51135936741314, 61.128735541529586] // OK, Rauma
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "luukku": 9,
+        "setup": "x",
+        "punchline": "x",
+        "password":"reki"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [22.301618336940855, 60.299591618334055] // OK, Parainen
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "luukku": 10,
+        "setup": "x",
+        "punchline": "x",
+        "password":"joulumarkkinat"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [23.781115793774788, 61.49598183673058] // OK, Tampere
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "luukku": 11,
+        "setup": "x",
+        "punchline": "x",
+        "password":"joulusiivous"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [18.06309282932712, 59.31526682229454] // OK
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "luukku": 12,
+        "setup": "Mikä on huolestuneiden kulkuväline?",
+        "punchline": "Stressiina!",
+        "password":"poro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [22.013371073066182, 61.68519089939078] // OK, Pomarkku
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "luukku": 13,
+        "setup": "x",
+        "punchline": "x",
+        "password":"savupiippu"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [21.95060565884398, 60.84266351774494] // OK
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "luukku": 14,
+        "setup": "x",
+        "punchline": "x",
+        "password":"lahjapaketti"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [23.408959007961304, 61.90572341611329] // OK, Ikaalinen
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "luukku": 15,
+        "setup": "x",
+        "punchline": "x",
+        "password":"perhejoulu"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [21.39104657141048, 60.82431008861171] // OK, Uusikaupunki
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "luukku": 16,
+        "setup": "x",
+        "punchline": "x",
+        "password":"joulukuusi"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [19.93928013166697, 60.096892984316355] // OK
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "luukku": 17,
+        "setup": "x",
+        "punchline": "x",
+        "password":"jouluntaika"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [24.922954874076172, 60.20537262762574] // OK, Pasila
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "luukku": 18,
+        "setup": "x",
+        "punchline": "x",
+        "password":"joululaulu"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [23.192089446450225, 61.66983709609074] // OK, Kyröskoski
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "luukku": 19,
+        "setup": "x",
+        "punchline": "x",
+        "password":"glögi"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [22.903834936995537, 61.34390853111933] // OK
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "luukku": 20,
+        "setup": "x",
+        "punchline": "x",
+        "password":"joulujuhla"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [21.459483043245868, 61.23393048672756] // OK, Olkiluoto
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "luukku": 21,
+        "setup": "x",
+        "punchline": "x",
+        "password":"tonttulakki"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [22.27526586456854, 60.44990937435386] // OK, Turku
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "luukku": 22,
+        "setup": "x",
+        "punchline": "x",
+        "password":"rosolli"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [21.79233956428554, 61.4921905232184] // OK, Pori
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "luukku": 23,
+        "setup": "x",
+        "punchline": "x",
+        "password":"joulunodotus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [21.910827801328136, 60.197849793680696] // OK, Nauvo
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "luukku": 24,
+        "setup": "x",
+        "punchline": "x",
+        "password":"hyvääjoulua"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [24.763684876165545, 59.43237066651057] // OK, Tallinna
+      }
+    }
+  ]
+};
+
+// -----------------------------
+// Kartta
+// -----------------------------
+const map = L.map('map').setView([60.47, 22.07], 7);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19
+}).addTo(map);
+
+// -----------------------------
+// Dynaamiset ikonit
+// Varmista, että kansiossa icons/1.png ... icons/24.png on kuvat.
+// className lisää drop-shadowin CSS:n kautta.
+// -----------------------------
+function getIcon(luukku) {
+  return L.icon({
+    iconUrl: `icons/${luukku}.png`,
+    iconSize: [36,36],
+    iconAnchor: [18,36],
+    popupAnchor: [0,-36],
+    className: 'icon-shadow'
+  });
+}
+
+// -----------------------------
+// MODAL - elementit & funktiot (vain KERRAN määritelty)
+// -----------------------------
+const modal = document.getElementById("passwordModal");
+const modalTitle = document.getElementById("modal-title");
+const passwordInput = document.getElementById("passwordInput");
+const passwordError = document.getElementById("passwordError");
+const passwordSubmit = document.getElementById("passwordSubmit");
+const closeBtn = document.querySelector(".close-btn");
+
+let currentFeature = null; // viite siihen featureen jota yritetään avata
+
+function openPasswordModal(feature, layer) {
+  currentFeature = { feature, layer };
+  modalTitle.innerText = `Avaa luukku ${feature.properties.luukku}`;
+  passwordInput.value = "";
+  passwordError.innerText = "";
+  modal.classList.add("show");
+  modal.setAttribute("aria-hidden", "false");
+  passwordInput.focus();
+}
+
+function closePasswordModal() {
+  modal.classList.remove("show");
+  modal.setAttribute("aria-hidden", "true");
+}
+
+// Klikkaus ruksista
+closeBtn.addEventListener("click", closePasswordModal);
+
+// Sulje ESC:llä
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") closePasswordModal();
+});
+
+// Lähetä salasana (painike)
+passwordSubmit.addEventListener("click", () => {
+  submitPassword();
+});
+
+// Lähetä salasana Enterilla kentästä
+passwordInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") submitPassword();
+});
+
+function submitPassword() {
+  if (!currentFeature) return;
+  const props = currentFeature.feature.properties;
+  const correctPass = props.password; // käyttäjän määräämä per-luukku salasana
+  if (passwordInput.value === correctPass) {
+    closePasswordModal();
+    setTimeout(()=>{
+        const layer = currentFeature.layer;
+        layer.bindPopup(html).openPopup();
+
+        // vasta kun popup avattu, nollataan:
+        currentFeature = null; 
+    }, 80);
+
+    const html = `
+      <div class="popup-content">
+        <div class="setup">${props.setup}</div>
+        <div class="punchline">${props.punchline}</div>
+      </div>
+    `;
+    currentFeature.layer.bindPopup(html).openPopup();
+  } else {
+    passwordError.innerText = "Väärä salasana!";
+  }
+}
+
+// -----------------------------
+// onEachFeature: liitä klikkaus, päivärajoitus jne.
+// -----------------------------
+function onEachFeature(feature, layer) {
+  const props = feature.properties;
+  const luukkuNumero = props.luukku;
+
+  layer.on("click", () => {
+    // Jos luukku suurempi kuin nykyinen päivä -> näytä ilmoitus
+    // Huom: Tämä käyttää vain päivän numeroa; jos haluat varmistaa että ollaan joulukuussa,
+    // voit lisätä tarkistuksen (today.getMonth() === 11) eli 11 = joulukuu (0-pohjainen).
+    if (luukkuNumero > currentDay) {
+      layer.bindPopup(`Luukku ${luukkuNumero} avautuu vasta ${luukkuNumero}.12!`).openPopup();
+      return;
+    }
+
+    // Avaa modal ja muistetaan feature + layer
+    openPasswordModal(feature, layer);
+  });
+}
+
+// -----------------------------
+// Lisää GeoJSON kartalle
+// Käytän pointToLayer, jotta marker voidaan luoda oikein.
+// -----------------------------
+L.geoJSON(luukut, {
+  pointToLayer: function(feature, latlng) {
+    return L.marker(latlng, {
+      icon: getIcon(feature.properties.luukku)
+    });
+  },
+  onEachFeature: onEachFeature
+}).addTo(map);
+
+</script>
+</body>
+</html>
