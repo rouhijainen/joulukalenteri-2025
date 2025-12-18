@@ -400,7 +400,7 @@ const luukut = {
       "properties": {
         "luukku": 19,
         "setup": "Mitä tulee kysyä, jos rakas ehdottaa road trippiä Tampereen läheiseen kaupunkiin?",
-        "punchline": '"Nooh onks toi nyt viisasta Ma` laav?"',
+        "punchline": '"Nooh onks toi nyt viisasta, Ma` laav?"',
         "password":"glögi"
       },
       "geometry": {
@@ -492,9 +492,9 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 function getIcon(luukku) {
   return L.icon({
     iconUrl: `icons/${luukku}.png`,
-    iconSize: [36,36],
-    iconAnchor: [18,36],
-    popupAnchor: [0,-36],
+    iconSize: [48,48],
+    iconAnchor: [24,48],
+    popupAnchor: [0,-48],
     className: 'icon-shadow'
   });
 }
@@ -607,6 +607,7 @@ L.geoJSON(luukut, {
 </script>
 </body>
 </html>
+
 
 
 
